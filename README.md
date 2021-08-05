@@ -16,7 +16,7 @@ Several AWS CloudFormation templates are defined for:
 * VPC (with Public and Database Subnets, Cidr Blocks, Route Tables, Internet Gateway, etc.)
 * EC2 (takes place in one of the subnets)
 * Security Groups (for public EC2 instances and for all instances in the network)
-* RDS (with its own DB-Subnet)
+* RDS (with its own DB Subnet Group)
 
 ## Using Nested Stack technology
 Some templates do define creation of the resources with type "AWS::CloudFormation::Stack".
