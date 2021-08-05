@@ -8,7 +8,7 @@ Repository with AWS CloudFormation templates designed to automate deployment of 
 ### Template files uploaded to the AWS S3
 <img src="https://raw.githubusercontent.com/eugene2owl/imageholder-cloudformation-templates/main/assets/CF_s3.png" alt="drawing" width="800"/>
 
-### New stack from the declared templates
+### New AWS CloudFormation stack from the declared templates
 <img src="https://raw.githubusercontent.com/eugene2owl/imageholder-cloudformation-templates/main/assets/CF_deploy.png" alt="drawing" width="800"/>
 
 ## Defined AWS resources
