@@ -1,0 +1,73 @@
+Description: >
+  This template deploys a ec2 instance to the provided VPC.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  ImageId:
+    Description: AWS Systems Manager Parameter Store to query the latest Amazon Linux 2 AMI
+    Type: String
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  InstanceType:
+    Description: Which instance type should we use to build the ec2 instance
+    Type: String
+    Default: t2.micro
+
+  Purpose:
+    Description: what is the purpose of this instance (bastion gateway) Will be appended to the name
+    Type: String
+    Default: BFF
+
+  Subnet:
+    Description: Choose which subnet this ec2 instance should should be deployed to
+    Type: AWS::EC2::Subnet::Id
+
+  SecurityGroup:
+    Description: Select the Security Group to use for the ec2 instance
+    Type: AWS::EC2::SecurityGroup::Id
+
+  RdsEndpointUrl:
+    Description: Endpoint URL to access main RDS database connection
+    Type: String
+
+  CommonSecurityGroup:
+    Description: Select common Security Group to use for the ec2 instance
+    Type: AWS::EC2::SecurityGroup::Id
+
+  SSHKey:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: SSH Key for to access to the ec2 instance
+
+Resources:
+  PublicInstance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref SSHKey
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+        - !Ref CommonSecurityGroup
+      SubnetId: !Ref Subnet
+      UserData:
+        "Fn::Base64": !Sub
+          - |
+            #!/bin/bash
+            export IMAGEHOLDER_DATABASE_URL=${imageholder_db_url}
+            echo $IMAGEHOLDER_DATABASE_URL > $HOME/user_data.txt
+            touch $HOME/test2.txt
+            sudo apt install postgresql postgresql-contrib -y
+            sudo add-apt-repository ppa:linuxuprising/java -y
+            sudo apt-get update
+            sudo apt-get install openjdk-11-jdk -y
+            sudo apt-get install awscli -y
+            sudo aws s3 cp s3://eugene-ivanov-training-web-app/imageholder-0.0.1-SNAPSHOT.jar $HOME
+          - imageholder_db_url: !Ref RdsEndpointUrl
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-${Purpose}-ec2-instance
+        - Key: env
+          Value: !Ref EnvironmentName

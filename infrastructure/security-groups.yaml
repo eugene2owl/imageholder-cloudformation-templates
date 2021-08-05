@@ -1,0 +1,81 @@
+Description: >
+  This template contains the security groups required by our entire stack.
+  We create them in a separate nested template, so they can be referenced
+  by all of the other nested templates.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: Choose which VPC the security groups should be deployed to
+
+  BastionCidr:
+    Type: String
+    Description: Provide a CIDR for SSH Access to be provided too.
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+
+Resources:
+  PublicInstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Access to the Bastion SSH host
+      GroupName: !Sub ${EnvironmentName}-Public-Instance-SG
+      SecurityGroupIngress:
+        # Allow access from Bastion IP by SSH
+        - CidrIp: !Ref BastionCidr
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+        # Allow access from anywhere by HTTPS
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+        # Allow access from anywhere by HTTP
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+        # Allow access from anywhere via port 8080 for http requests to Spring application
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-public-instance-SG
+        - Key: env
+          Value: !Ref EnvironmentName
+
+  CommonSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Access between all instances inside a VPC
+      GroupName: !Sub ${EnvironmentName}-Common-SG
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-Common-SG
+        - Key: env
+          Value: !Ref EnvironmentName
+
+  CommonSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: -1
+      FromPort: -1
+      ToPort: -1
+      GroupId: !Ref CommonSecurityGroup
+      SourceSecurityGroupId: !Ref CommonSecurityGroup
+
+Outputs:
+  PublicInstanceSecurityGroup:
+    Description: A reference to the security group for bastion hosts
+    Value: !GetAtt [ "PublicInstanceSecurityGroup", "GroupId" ]
+  CommonSecurityGroup:
+    Description: A reference to the common security group
+    Value: !GetAtt [ "CommonSecurityGroup", "GroupId" ]

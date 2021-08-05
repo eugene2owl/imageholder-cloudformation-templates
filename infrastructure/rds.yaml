@@ -1,0 +1,199 @@
+Description: >
+  This template deploys an RDS, with a DB Subnet Group.
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: Choose which VPC the security groups should be deployed to
+
+  MultiAZ:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+
+  ImageHolderDBName:
+    Default: imageholder
+    Description: The ImageHolder application database name
+    Type: String
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9][a-zA-Z0-9_-]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+
+  DBUser:
+    NoEcho: 'true'
+    Description: The database admin account username
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+
+  DBPassword:
+    NoEcho: 'true'
+    Description: The database admin account password
+    Type: String
+    MinLength: '1'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]+'
+    ConstraintDescription: must contain only alphanumeric characters.
+
+  DBAllocatedStorage:
+    Default: '5'
+    Description: The size of the database (Gb)
+    Type: Number
+    MinValue: '5'
+    MaxValue: '1024'
+    ConstraintDescription: must be between 5 and 1024Gb.
+
+  DBInstanceClass:
+    Description: The database instance type
+    Type: String
+    Default: db.t2.micro
+    AllowedValues: [db.t2.micro, db.t3.micro, db.t3.small, db.t3.medium, db.t3.large, db.t3.xlarge, db.t3.2xlarge]
+    ConstraintDescription: must select a valid database instance type.
+
+  Subnets:
+    Description: Choose which subnets this RDS should be deployed to
+    Type: List<AWS::EC2::Subnet::Id>
+
+  CommonSecurityGroup:
+    Description: The EC2 security group that contains instances that need access to the database
+    Type: AWS::EC2::SecurityGroup::Id
+
+Conditions:
+  IsProdEnvironment: !Equals [ !Select [ 1, !Split [ "-", !Ref EnvironmentName ] ], "prod" ]
+
+Resources:
+  DBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: DB Subnet group. Must contain at least two subnets in different AZ
+      SubnetIds: !Ref Subnets
+
+  DBEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Open database for access
+      GroupName: !Sub ${EnvironmentName}-DB-instance-SG
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '5432'
+          ToPort: '5432'
+          SourceSecurityGroupId: !Ref CommonSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-DB-instance-SG
+        - Key: env
+          Value: !Ref EnvironmentName
+
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: ITC postgres 10 parameter group
+      Family: postgres10
+      Parameters:
+        max_prepared_transactions: 100
+        max_connections: 2000
+
+  MasterDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBName: !Ref 'ImageHolderDBName'
+      DBParameterGroupName: !Ref RDSDBParameterGroup
+      AllocatedStorage: !Ref 'DBAllocatedStorage'
+      BackupRetentionPeriod: !If [IsProdEnvironment, 7, 1]
+      CopyTagsToSnapshot: True
+      DBInstanceClass: !Ref 'DBInstanceClass'
+      StorageType: gp2
+      Engine: postgres
+      EngineVersion: 10.6
+      MasterUsername: !Ref 'DBUser'
+      MasterUserPassword: !Ref 'DBPassword'
+      MultiAZ: !Ref MultiAZ
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Tags:
+        - Key: Name
+          Value: Master Database
+        - Key: env
+          Value: !Ref EnvironmentName
+      VPCSecurityGroups: [!GetAtt [DBEC2SecurityGroup, GroupId]]
+    DeletionPolicy: Delete
+
+Outputs:
+  EC2Platform:
+    Description: Platform in which this stack is deployed
+    Value: EC2-VPC
+
+  DefaultJdbcConnectionUrl:
+    Value: !Join ['', ['jdbc:postgresql://', !GetAtt [MasterDB, Endpoint.Address], ':',
+      !GetAtt [MasterDB, Endpoint.Port], /, 'postgres']]
+    Export:
+      Name: !Sub ${EnvironmentName}-DefaultJdbcConnectionUrl
+
+  ImageHolderJDBCConnectionUrl:
+    Value: !Join ['', ['jdbc:postgresql://', !GetAtt [MasterDB, Endpoint.Address], ':',
+                       !GetAtt [MasterDB, Endpoint.Port], /, !Ref 'ImageHolderDBName']]
+    Export:
+      Name: !Sub ${EnvironmentName}-ImageHolderJDBCConnectionUrl
+
+  AwsRdsParameterGroup:
+    Value: !Ref RDSDBParameterGroup
+    Description: Parameter group for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsParameterGroup
+
+  AwsRdsAllocatedStorage:
+    Value: !Ref 'DBAllocatedStorage'
+    Description: Allocaion Size for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsAllocatedStorage
+
+  AwsRdsInstanceClass:
+    Value: !Ref 'DBInstanceClass'
+    Description: Instace Class for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsInstanceClass
+
+  AwsRdsEngine:
+    Value: postgres
+    Description: Engine for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsEngine
+
+  AwsRdsEngineVersion:
+    Value: 10.6
+    Description: Engine version for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsEngineVersion
+
+  AwsRdsMasterUsername:
+    Value: !Ref 'DBUser'
+    Description: Master username for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsMasterUsername
+
+  AwsRdsMasterPassword:
+    Value: !Ref 'DBPassword'
+    Description: Master Password for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsMasterPassword
+
+  AwsRdsSubnetGroupName:
+    Value: !Ref DBSubnetGroup
+    Description: Subnet Group for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsSubnetGroupName
+
+  AwsRdsVpcSecurityGroupId:
+    Value: !GetAtt [DBEC2SecurityGroup, GroupId]
+    Description: VPC Security Group Id for RDS that should be created for tenant during activation process
+    Export:
+      Name: !Sub ${EnvironmentName}-AwsRdsVpcSecurityGroupId

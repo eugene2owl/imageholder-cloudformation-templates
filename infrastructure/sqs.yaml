@@ -1,0 +1,25 @@
+Description: >
+  This creates the SQS queue.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+
+Resources:
+  SQS:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: eugene-ivanov-training-imageholder-sqs-queue
+      VisibilityTimeout: 5
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName}-SQS-queue
+
+Outputs:
+  VPC:
+    Description: ID for the SQS
+    Value: !Ref SQS
+    Export:
+      Name: !Sub ${EnvironmentName}-SQS
+
+
